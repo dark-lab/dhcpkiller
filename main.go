@@ -105,6 +105,7 @@ func RequestIP() string {
 	//Create a connection to use
 	//We need to set the connection ports to 1068 and 1067 so we don't need root access
 	c, err := dhcp4client.NewInetSock(dhcp4client.SetLocalAddr(net.UDPAddr{IP: net.IPv4(0, 0, 0, 0), Port: 68}), dhcp4client.SetRemoteAddr(net.UDPAddr{IP: net.IPv4bcast, Port: 67}))
+	defer c.Close()
 	if err != nil {
 		log.Fatalln("Client Conection Generation:" + err.Error())
 	}
