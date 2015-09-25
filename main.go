@@ -44,7 +44,7 @@ func inc(ip net.IP) {
 func Nuke(ip net.IP) {
 	var err error
 
-	m, err := net.ParseMAC("08-00-27-00-A8-E8")
+	m, err := net.ParseMAC(MAC)
 	if err != nil {
 		log.Printf("MAC Error:%v\n", err)
 	}
@@ -97,7 +97,7 @@ func RequestIP() string {
 
 	var err error
 
-	m, err := net.ParseMAC("08-00-27-00-A8-E8")
+	m, err := net.ParseMAC(MAC)
 	if err != nil {
 		log.Printf("MAC Error:%v\n", err)
 	}
